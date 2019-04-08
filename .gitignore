@@ -1,5 +1,7 @@
 *.npy
 *.md
+checkpoint/
 __pycache__/
 data2017/
 img/
+try*.py

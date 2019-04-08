@@ -41,12 +41,14 @@ def train():
 
     ###====================== PRE-LOAD DATA ===========================###
     ###====================== 加载数据 ===========================###
+    # 得到文件list
     train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))
     train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.png', printable=False))
     valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
     valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
 
     ## If your machine have enough memory, please pre-load the whole train set.
+    # 得到图片list
     train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=32)
     # for im in train_hr_imgs:
     #     print(im.shape)
@@ -87,15 +89,22 @@ def train():
     print ("完成 生成网络和判别网络")
 
     ###========================== DEFINE TRAIN OPS ==========================###
+    # 计算对抗网络的损失函数
     d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
     d_loss2 = tl.cost.sigmoid_cross_entropy(logits_fake, tf.zeros_like(logits_fake), name='d2')
     d_loss = d_loss1 + d_loss2
-
+    
+    # 计算生成网络的损失函数
     g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
+    
+    # 计算mes = ((xij - x`ij) ^ 2) / (M * N)
     mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image, is_mean=True)
+    
     vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
 
     g_loss = mse_loss + vgg_loss + g_gan_loss
+
+
 
     g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
     d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
@@ -103,6 +112,7 @@ def train():
     with tf.variable_scope('learning_rate'):
         lr_v = tf.Variable(lr_init, trainable=False)
     ## Pretrain
+    # 根据mes，对生成网络进行预训练
     g_optim_init = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(mse_loss, var_list=g_vars)
     ## SRGAN
     g_optim = tf.train.AdamOptimizer(lr_v, beta1=beta1).minimize(g_loss, var_list=g_vars)
@@ -111,7 +121,7 @@ def train():
 
     ###========================== RESTORE MODEL =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    sess.run(tf.global_variables_initializer())
+    tl.layers.initialize_global_variables(sess)
     if tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), network=net_g) is False:
         tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), network=net_g)
     tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), network=net_d)
@@ -125,7 +135,7 @@ def train():
         print("Please download vgg19.npz from : https://github.com/machrisaa/tensorflow-vgg")
         exit()
     npz = np.load(vgg19_npy_path, encoding='latin1').item()
-
+    
     params = []
     for val in sorted(npz.items()):
         W = np.asarray(val[1][0])
@@ -227,6 +237,7 @@ def train():
         for idx in range(0, len(train_hr_imgs), batch_size):
             step_time = time.time()
             b_imgs_384 = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=crop_sub_imgs_fn, is_random=True)
+            # 下采样
             b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)
             ## update D
             errD, _ = sess.run([d_loss, d_optim], {t_image: b_imgs_96, t_target_image: b_imgs_384})
@@ -295,7 +306,7 @@ def evaluate():
 
     ###========================== RESTORE G =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
-    sess.run(tf.global_variables_initializer())
+    tl.layers.initialize_global_variables(sess)
     tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_srgan.npz', network=net_g)
 
     ###======================= EVALUATION =============================###
