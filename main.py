@@ -15,17 +15,17 @@ from config import config, log_config
 
 ###====================== HYPER-PARAMETERS ===========================###
 ## Adam
-batch_size = config.TRAIN.batch_size    #16
-lr_init = config.TRAIN.lr_init                   #1e-4
-beta1 = config.TRAIN.beta1                  #0.9
+batch_size = config.TRAIN.batch_size            #16
+lr_init = config.TRAIN.lr_init                           #1e-4
+beta1 = config.TRAIN.beta1                          #0.9
 ## initialize G
-n_epoch_init = config.TRAIN.n_epoch_init #100
+n_epoch_init = config.TRAIN.n_epoch_init     #100
 ## adversarial learning (SRGAN)
-n_epoch = config.TRAIN.n_epoch          #2000
-lr_decay = config.TRAIN.lr_decay            #0.1
-decay_every = config.TRAIN.decay_every#2000/2=1000
+n_epoch = config.TRAIN.n_epoch                 #2000
+lr_decay = config.TRAIN.lr_decay                  #0.1
+decay_every = config.TRAIN.decay_every      #2000/2=1000
 
-ni = int(np.sqrt(batch_size))
+ni = int(np.sqrt(batch_size))                           #4
 
 
 def train():
@@ -41,14 +41,14 @@ def train():
 
     ###====================== PRE-LOAD DATA ===========================###
     ###====================== 加载数据 ===========================###
-    # 得到文件list
+    # 得到文件数组
     train_hr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.hr_img_path, regx='.*.png', printable=False))
     train_lr_img_list = sorted(tl.files.load_file_list(path=config.TRAIN.lr_img_path, regx='.*.png', printable=False))
     valid_hr_img_list = sorted(tl.files.load_file_list(path=config.VALID.hr_img_path, regx='.*.png', printable=False))
     valid_lr_img_list = sorted(tl.files.load_file_list(path=config.VALID.lr_img_path, regx='.*.png', printable=False))
 
     ## If your machine have enough memory, please pre-load the whole train set.
-    # 得到图片list
+    # 得到图片数组
     train_hr_imgs = tl.vis.read_images(train_hr_img_list, path=config.TRAIN.hr_img_path, n_threads=32)
     # for im in train_hr_imgs:
     #     print(im.shape)
@@ -59,15 +59,16 @@ def train():
     # for im in valid_hr_imgs:
     #     print(im.shape)
     # exit()
-
     print ("完成加载数据")
 
     ###========================== DEFINE MODEL ============================###
+    ###========================== model的创建     ============================###
     ## train inference
     t_image = tf.placeholder('float32', [batch_size, 96, 96, 3], name='t_image_input_to_SRGAN_generator')
     t_target_image = tf.placeholder('float32', [batch_size, 384, 384, 3], name='t_target_image')
 
     # 获取生成网络和判别网络
+    # net_d：判别网络、net_g：生成网络、logits_real：真实图片经过判别网络的结果、logits_fake：生成的图片经过判别网络的结果
     net_g = SRGAN_g(t_image, is_train=True, reuse=False)
     net_d, logits_real = SRGAN_d(t_target_image, is_train=True, reuse=False)
     _, logits_fake = SRGAN_d(net_g.outputs, is_train=True, reuse=True)
@@ -84,24 +85,27 @@ def train():
     net_vgg, vgg_target_emb = Vgg19_simple_api((t_target_image_224 + 1) / 2, reuse=False)
     _, vgg_predict_emb = Vgg19_simple_api((t_predict_image_224 + 1) / 2, reuse=True)
 
-    ## test inference
-    net_g_test = SRGAN_g(t_image, is_train=False, reuse=True)
-    print ("完成 生成网络和判别网络")
+    ## test inference 
+    net_g_test = SRGAN_g(t_image, is_train=False, reuse=True) 
+    print ("完成 生成网络和判别网络") 
 
     ###========================== DEFINE TRAIN OPS ==========================###
-    # 计算对抗网络的损失函数
+    # logits_real：真实的图片经过判别网络后的输出
+    # logits_fake：生成的图片经过判别网络后的输出
+    # net_g：生成网络
+    
+    
+    
+    ## 计算对抗网络的损失函数
     d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
     d_loss2 = tl.cost.sigmoid_cross_entropy(logits_fake, tf.zeros_like(logits_fake), name='d2')
     d_loss = d_loss1 + d_loss2
     
-    # 计算生成网络的损失函数
+    ## 计算生成网络的损失函数
     g_gan_loss = 1e-3 * tl.cost.sigmoid_cross_entropy(logits_fake, tf.ones_like(logits_fake), name='g')
-    
     # 计算mes = ((xij - x`ij) ^ 2) / (M * N)
     mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image, is_mean=True)
-    
     vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
-
     g_loss = mse_loss + vgg_loss + g_gan_loss
 
 
@@ -149,6 +153,7 @@ def train():
 
     ###============================= TRAINING ===============================###
     ## use first `batch_size` of train set to have a quick test during training
+    ## 测试数据集，将
     sample_imgs = train_hr_imgs[0:batch_size]
     # sample_imgs = tl.vis.read_images(train_hr_img_list[0:batch_size], path=config.TRAIN.hr_img_path, n_threads=32) # if no pre-load train set
     sample_imgs_384 = tl.prepro.threading_data(sample_imgs, fn=crop_sub_imgs_fn, is_random=False)
@@ -162,7 +167,7 @@ def train():
 
     ###========================= initialize G ====================###
     ## fixed learning rate
-    sess.run(tf.assign(lr_v, lr_init))
+    sess.run(tf.assign(lr_v, lr_init))  # lr_v = lr_init
     print(" ** fixed learning rate: %f (for init G)" % lr_init)
     
     # 训练100次
@@ -208,6 +213,7 @@ def train():
     ###========================= 开始训练 =========================###
     
     print ("开始训练")
+    # 训练2000次    
     for epoch in range(0, n_epoch + 1):
         ## update learning rate
         if epoch != 0 and (epoch % decay_every == 0):
@@ -236,6 +242,7 @@ def train():
         ## If your machine have enough memory, please pre-load the whole train set.
         for idx in range(0, len(train_hr_imgs), batch_size):
             step_time = time.time()
+            # 图片做裁剪预处理
             b_imgs_384 = tl.prepro.threading_data(train_hr_imgs[idx:idx + batch_size], fn=crop_sub_imgs_fn, is_random=True)
             # 下采样
             b_imgs_96 = tl.prepro.threading_data(b_imgs_384, fn=downsample_fn)

@@ -4,4 +4,5 @@ checkpoint/
 __pycache__/
 data2017/
 img/
+temp/
 try*.py
