@@ -90,13 +90,14 @@ def train():
     print ("完成 生成网络和判别网络") 
 
     ###========================== DEFINE TRAIN OPS ==========================###
+    ###========================== 损失函数、梯度下降的创建 ==================###
     # logits_real：真实的图片经过判别网络后的输出
     # logits_fake：生成的图片经过判别网络后的输出
     # net_g：生成网络
     
     
     
-    ## 计算对抗网络的损失函数
+    ## 计算对抗网络的损失函数 sigmoid_cross_entropy：通过 sigmoid 计算，再计算交叉熵
     d_loss1 = tl.cost.sigmoid_cross_entropy(logits_real, tf.ones_like(logits_real), name='d1')
     d_loss2 = tl.cost.sigmoid_cross_entropy(logits_fake, tf.zeros_like(logits_fake), name='d2')
     d_loss = d_loss1 + d_loss2
@@ -107,8 +108,8 @@ def train():
     mse_loss = tl.cost.mean_squared_error(net_g.outputs, t_target_image, is_mean=True)
     vgg_loss = 2e-6 * tl.cost.mean_squared_error(vgg_predict_emb.outputs, vgg_target_emb.outputs, is_mean=True)
     g_loss = mse_loss + vgg_loss + g_gan_loss
-
-
+    
+    
 
     g_vars = tl.layers.get_variables_with_name('SRGAN_g', True, True)
     d_vars = tl.layers.get_variables_with_name('SRGAN_d', True, True)
@@ -124,12 +125,13 @@ def train():
     print ("完成 损失函数和递归下降 ")
 
     ###========================== RESTORE MODEL =============================###
+    ###========================== 加载检查点 =============================###
     sess = tf.Session(config=tf.ConfigProto(allow_soft_placement=True, log_device_placement=False))
     tl.layers.initialize_global_variables(sess)
     if tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}.npz'.format(tl.global_flag['mode']), network=net_g) is False:
         tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), network=net_g)
     tl.files.load_and_assign_npz(sess=sess, name=checkpoint_dir + '/d_{}.npz'.format(tl.global_flag['mode']), network=net_d)
-    print ("完成从checkpoint中加载MODEL")
+    print ("完成加载检查点")
 
 
     ###============================= LOAD VGG ===============================###
@@ -153,7 +155,7 @@ def train():
 
     ###============================= TRAINING ===============================###
     ## use first `batch_size` of train set to have a quick test during training
-    ## 测试数据集，将
+    ## 测试数据集
     sample_imgs = train_hr_imgs[0:batch_size]
     # sample_imgs = tl.vis.read_images(train_hr_img_list[0:batch_size], path=config.TRAIN.hr_img_path, n_threads=32) # if no pre-load train set
     sample_imgs_384 = tl.prepro.threading_data(sample_imgs, fn=crop_sub_imgs_fn, is_random=False)
@@ -166,6 +168,7 @@ def train():
     tl.vis.save_images(sample_imgs_384, [ni, ni], save_dir_gan + '/_train_sample_384.png')
 
     ###========================= initialize G ====================###
+    ###========================= 生成网络预训练 ==================###
     ## fixed learning rate
     sess.run(tf.assign(lr_v, lr_init))  # lr_v = lr_init
     print(" ** fixed learning rate: %f (for init G)" % lr_init)
@@ -209,15 +212,17 @@ def train():
             tl.files.save_npz(net_g.all_params, name=checkpoint_dir + '/g_{}_init.npz'.format(tl.global_flag['mode']), sess=sess)
 
     print ("完成 initialize G")
-    ###========================= train GAN (SRGAN) =========================###
-    ###========================= 开始训练 =========================###
     
+    
+    ###========================= train GAN (SRGAN) =========================###
+    ###========================= 开始训练 ==================================###
     print ("开始训练")
     # 训练2000次    
     for epoch in range(0, n_epoch + 1):
-        ## update learning rate
+        ## update learning rate 
+        ## 训练次数达到1000的整数倍时，调整学习率（变小）
         if epoch != 0 and (epoch % decay_every == 0):
-            new_lr_decay = lr_decay**(epoch // decay_every)
+            new_lr_decay = lr_decay**(epoch // decay_every)  # new_lr_decay = 0.1 ** (1000//1000)
             sess.run(tf.assign(lr_v, lr_init * new_lr_decay))
             log = " ** new learning rate: %f (for GAN)" % (lr_init * new_lr_decay)
             print(log)

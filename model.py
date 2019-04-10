@@ -10,7 +10,6 @@ from tensorlayer.layers import *
 # from tensorflow.python.ops import math_ops, init_ops, array_ops, nn
 # from tensorflow.python.util import nest
 # from tensorflow.contrib.rnn.python.ops import core_rnn_cell
-
 # https://github.com/david-gpu/srez/blob/master/srez_model.py
 
 
@@ -29,7 +28,7 @@ def SRGAN_g(t_image, is_train=False, reuse=False):
         
         # 神经网络的基础是一个 InputLayer 实例。n代表了将要提供给网络的输入数据。
         n = InputLayer(t_image, name='in')
-        # 卷积层+激励层
+        # 卷积层+激励层rulu
         n = Conv2d(n, 64, (3, 3), (1, 1), act=tf.nn.relu, padding='SAME', W_init=w_init, name='n64s1/c')
         temp = n
         
@@ -47,7 +46,7 @@ def SRGAN_g(t_image, is_train=False, reuse=False):
         n = Conv2d(n, 64, (3, 3), (1, 1), act=None, padding='SAME', W_init=w_init, b_init=b_init, name='n64s1/c/m')
         
         # BN层 https://www.cnblogs.com/guoyaohua/p/8724433.html
-        # 而BN就是通过一定的规范化手段，把每层的输入的分布强行拉回到均值为0方差为1的标准正态分布
+        # 而BN就是通过一定的规范化手段，把每层的输入的分布强行拉回到均值为0方差为1的标准正态分布，加速收敛，加快训练
         n = BatchNormLayer(n, is_train=is_train, gamma_init=g_init, name='n64s1/b/m')
         
         # Elementwise层，实现残差网络，将具有相同结构的网络层的神经元相加
@@ -203,7 +202,7 @@ def SRGAN_d(input_images, is_train=True, reuse=False):
         net_ho = DenseLayer(net_ho, n_units=1, act=tf.identity, W_init=w_init, name='ho/dense')
         logits = net_ho.outputs
         # 激励函数为sigmoid
-        net_ho.outputs =    (net_ho.outputs)
+        net_ho.outputs = tf.nn.sigmoid(net_ho.outputs)
 
     return net_ho, logits
 '''
